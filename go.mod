@@ -2,7 +2,7 @@ module github.com/zinrai/sakura-pki
 
 go 1.26.0
 
-require github.com/sacloud/sacloud-sdk-go v0.1.0
+require github.com/sacloud/sacloud-sdk-go v0.2.0
 
 require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
