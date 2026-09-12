@@ -8,7 +8,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -69,9 +68,6 @@ func server(args []string) {
 		}
 	}
 
-	if err := writeCACert(ctx, api, id, *out); err != nil {
-		log.Fatal(err)
-	}
 	res, err := issueServer(ctx, newIssuer(api, id), *out, notAfter(*ttl), sub,
 		cn, names, string(csrPEM))
 	if err != nil {
@@ -82,10 +78,9 @@ func server(args []string) {
 
 // issued is what the caller needs after a server certificate is written.
 type issued struct {
-	CN            string `json:"cn"`
-	ID            string `json:"id"`
-	Certificate   string `json:"certificate"`
-	CACertificate string `json:"ca_certificate"`
+	CN          string `json:"cn"`
+	ID          string `json:"id"`
+	Certificate string `json:"certificate"`
 }
 
 // issueServer writes the certificate last so that a failure part way through
@@ -109,10 +104,9 @@ func issueServer(ctx context.Context, iss *issuer, out string, na time.Time, sub
 		return nil, fmt.Errorf("%s: %w", cn, err)
 	}
 	return &issued{
-		CN:            cn,
-		ID:            res.ID,
-		Certificate:   path,
-		CACertificate: filepath.Join(out, caCertName),
+		CN:          cn,
+		ID:          res.ID,
+		Certificate: path,
 	}, nil
 }
 

@@ -13,7 +13,6 @@ import (
 
 func client(args []string) {
 	fs := flag.NewFlagSet("client", flag.ExitOnError)
-	out := fs.String("out", "./out", "directory for the CA certificate")
 	ttl := fs.Duration("ttl", 8760*time.Hour, "certificate lifetime")
 	force := fs.Bool("force", false, "issue even if a live certificate for this name exists")
 	var sub subject
@@ -55,9 +54,6 @@ func client(args []string) {
 		}
 	}
 
-	if err := writeCACert(ctx, api, id, *out); err != nil {
-		log.Fatal(err)
-	}
 	issued, err := issueClients(ctx, api, id, notAfter(*ttl), sub, fs.Args())
 	if err != nil {
 		log.Fatal(err)

@@ -16,6 +16,17 @@ export SAKURACLOUD_ACCESS_TOKEN_SECRET=...
 export SAKURA_PKI_CA_ID=...
 ```
 
+## Take the CA certificate
+
+Both sides of a mutually authenticated connection need it. Nothing is issued,
+so it can be run at any time.
+
+```
+sakura-pki ca -out ./out
+```
+
+This writes `out/ca.crt`.
+
 ## Issue a server certificate
 
 Make the key and CSR on the server.
@@ -34,8 +45,8 @@ sakura-pki server -csr proxy.csr -out ./out \
   -san proxy.example.internal,localhost proxy.example.internal
 ```
 
-This writes `out/ca.crt` and `out/server/proxy.example.internal.crt`. Leave
-`proxy.key` where you made it.
+This writes `out/server/proxy.example.internal.crt`. Leave `proxy.key` where
+you made it.
 
 `-san` entries become DNS names. An IP address is rejected: the API cannot
 produce an iPAddress SAN. Reach such a host by name, or override the expected
@@ -46,10 +57,11 @@ name in the client.
 Same CA.
 
 ```
-sakura-pki client -out ./out -country JP -org "Example Inc." alice bob
+sakura-pki client -country JP -org "Example Inc." alice bob
 ```
 
-One enrolment URL per user is printed. Hand it to that user.
+One enrolment URL per user is printed. Hand it to that user. Nothing is
+written to disk: the key and the certificate exist only in the user's browser.
 
 ```
 [
@@ -89,7 +101,7 @@ The client:
 ## Add a user later
 
 ```
-sakura-pki client -out ./out -country JP -org "Example Inc." carol
+sakura-pki client -country JP -org "Example Inc." carol
 ```
 
 ## List

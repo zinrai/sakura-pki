@@ -21,19 +21,21 @@ const caCertName = "ca.crt"
 // is the thing a managed CA is meant to avoid.
 var issuanceURL = types.CertificateAuthorityIssuanceMethods.URL
 
-func writeCACert(ctx context.Context, api iaas.CertificateAuthorityAPI, id iaasID, out string) error {
+func writeCACert(ctx context.Context, api iaas.CertificateAuthorityAPI, id iaasID, out string) (string, error) {
 	detail, err := api.Detail(ctx, id)
 	if err != nil {
-		return fmt.Errorf("could not fetch the CA certificate: %w", err)
+		return "", fmt.Errorf("could not fetch the CA certificate: %w", err)
 	}
 	if detail.CertificateData == nil || detail.CertificateData.CertificatePEM == "" {
-		return fmt.Errorf("the CA certificate was empty")
+		return "", fmt.Errorf("the CA certificate was empty")
 	}
 
 	if err := os.MkdirAll(out, 0o755); err != nil {
-		return err
+		return "", err
 	}
-	return os.WriteFile(filepath.Join(out, caCertName), []byte(detail.CertificateData.CertificatePEM), 0o644)
+
+	path := filepath.Join(out, caCertName)
+	return path, os.WriteFile(path, []byte(detail.CertificateData.CertificatePEM), 0o644)
 }
 
 // writeCert writes with 0644 because everything this tool writes is public.

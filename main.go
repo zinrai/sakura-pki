@@ -21,6 +21,8 @@ func main() {
 
 	args := os.Args[2:]
 	switch os.Args[1] {
+	case "ca":
+		ca(args)
 	case "server":
 		server(args)
 	case "client":
@@ -41,6 +43,7 @@ func main() {
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "usage: sakura-pki <command> [args]\n\n")
+	fmt.Fprintf(os.Stderr, "  ca      write the CA certificate\n")
 	fmt.Fprintf(os.Stderr, "  server  issue a server certificate for a CSR\n")
 	fmt.Fprintf(os.Stderr, "  client  issue an enrolment URL for a client certificate\n")
 	fmt.Fprintf(os.Stderr, "  list    list issued certificates\n")
