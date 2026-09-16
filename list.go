@@ -3,11 +3,51 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
+	"log"
+	"os"
 	"strings"
 
 	"github.com/sacloud/sacloud-sdk-go/api/iaas"
 )
+
+func list(args []string) {
+	fs := flag.NewFlagSet("list", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "usage: sakura-pki list\n\n")
+		fmt.Fprintf(os.Stderr, "Print issued certificates as JSON. Revocation takes the ids.\n")
+	}
+	fs.Parse(args)
+
+	if fs.NArg() != 0 {
+		fs.Usage()
+		os.Exit(2)
+	}
+	id, err := caID()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	api, err := newAPI()
+	if err != nil {
+		log.Fatal(err)
+	}
+	ctx := context.Background()
+
+	// One array rather than one per kind, so that a filter over everything is a
+	// single jq expression
+	all := []certEntry{}
+	for _, kind := range []string{"clients", "servers"} {
+		certs, err := listCerts(ctx, api, id, kind)
+		if err != nil {
+			log.Fatal(err)
+		}
+		all = append(all, certs...)
+	}
+
+	printJSON(all)
+}
 
 // pageSize is what we ask for per request. The API caps a page at some size of
 // its own, which is why the result is still paged through rather than fetched in

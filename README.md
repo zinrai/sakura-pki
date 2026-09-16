@@ -40,9 +40,9 @@ Only the public key is taken from the CSR, so the `-subj` value does not matter.
 Subject and SANs come from the flags below.
 
 ```
-sakura-pki server -csr proxy.csr -out ./out \
+sakura-pki server -cn proxy.example.internal -csr proxy.csr -out ./out \
   -country JP -org "Example Inc." \
-  -san proxy.example.internal,localhost proxy.example.internal
+  -san proxy.example.internal,localhost
 ```
 
 This writes `out/server/proxy.example.internal.crt`. Leave `proxy.key` where
@@ -57,7 +57,7 @@ name in the client.
 Same CA.
 
 ```
-sakura-pki client -country JP -org "Example Inc." alice bob
+sakura-pki client -cn alice -cn bob -country JP -org "Example Inc."
 ```
 
 One enrolment URL per user is printed. Hand it to that user. Nothing is
@@ -101,7 +101,7 @@ The client:
 ## Add a user later
 
 ```
-sakura-pki client -country JP -org "Example Inc." carol
+sakura-pki client -cn carol -country JP -org "Example Inc."
 ```
 
 ## List
@@ -140,7 +140,7 @@ sakura-pki revoke -server <ID>
 An enrolment URL that nobody has used cannot be revoked. Cancel it instead.
 
 ```
-sakura-pki deny <ID>
+sakura-pki deny -client <ID>
 ```
 
 ## Reissuing
@@ -149,7 +149,7 @@ Issuing never replaces. `server` and `client` stop when a live certificate for
 the name already exists, and name it.
 
 ```
-$ sakura-pki server -csr proxy.csr proxy.example.internal
+$ sakura-pki server -cn proxy.example.internal -csr proxy.csr
 proxy.example.internal: a server certificate is in the way
   (id=11111111-2222-3333-4444-555555555555 state=available); revoke it or pass -force
 ```

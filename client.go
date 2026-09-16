@@ -13,19 +13,21 @@ import (
 
 func client(args []string) {
 	fs := flag.NewFlagSet("client", flag.ExitOnError)
+	var cns stringList
+	fs.Var(&cns, "cn", "common name of the certificate (repeatable)")
 	ttl := fs.Duration("ttl", 8760*time.Hour, "certificate lifetime")
 	force := fs.Bool("force", false, "issue even if a live certificate for this name exists")
 	var sub subject
 	sub.bind(fs)
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: sakura-pki client [flags] <CN>...\n\n")
+		fmt.Fprintf(os.Stderr, "usage: sakura-pki client -cn <CN> [-cn <CN>...] [flags]\n\n")
 		fmt.Fprintf(os.Stderr, "Issue an enrolment URL per user. The key is generated in the user's\n")
 		fmt.Fprintf(os.Stderr, "browser and reaches neither this tool nor the CA.\n\n")
 		fs.PrintDefaults()
 	}
 	fs.Parse(args)
 
-	if fs.NArg() == 0 {
+	if len(cns) == 0 || fs.NArg() != 0 {
 		fs.Usage()
 		os.Exit(2)
 	}
@@ -43,7 +45,7 @@ func client(args []string) {
 	// Check every name first, so that a clash on the third name does not leave
 	// the first two already issued
 	if !*force {
-		for _, cn := range fs.Args() {
+		for _, cn := range cns {
 			in, err := cnInUse(ctx, api, id, "clients", cn)
 			if err != nil {
 				log.Fatal(err)
@@ -54,7 +56,7 @@ func client(args []string) {
 		}
 	}
 
-	issued, err := issueClients(ctx, api, id, notAfter(*ttl), sub, fs.Args())
+	issued, err := issueClients(ctx, api, id, notAfter(*ttl), sub, cns)
 	if err != nil {
 		log.Fatal(err)
 	}

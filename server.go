@@ -16,6 +16,7 @@ import (
 
 func server(args []string) {
 	fs := flag.NewFlagSet("server", flag.ExitOnError)
+	cnFlag := fs.String("cn", "", "common name of the certificate")
 	csrPath := fs.String("csr", "", "CSR made on the host that will hold the key")
 	out := fs.String("out", "./out", "output directory")
 	ttl := fs.Duration("ttl", 8760*time.Hour, "certificate lifetime")
@@ -24,7 +25,7 @@ func server(args []string) {
 	var sub subject
 	sub.bind(fs)
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: sakura-pki server -csr <FILE> [flags] <CN>\n\n")
+		fmt.Fprintf(os.Stderr, "usage: sakura-pki server -cn <CN> -csr <FILE> [flags]\n\n")
 		fmt.Fprintf(os.Stderr, "Issue a server certificate for a CSR. Make the CSR where the key will live:\n")
 		fmt.Fprintf(os.Stderr, "  openssl req -new -newkey rsa:2048 -nodes \\\n")
 		fmt.Fprintf(os.Stderr, "    -keyout proxy.key -out proxy.csr -subj /CN=<CN>\n\n")
@@ -32,7 +33,7 @@ func server(args []string) {
 	}
 	fs.Parse(args)
 
-	if *csrPath == "" || fs.NArg() != 1 {
+	if *cnFlag == "" || *csrPath == "" || fs.NArg() != 0 {
 		fs.Usage()
 		os.Exit(2)
 	}
@@ -43,7 +44,7 @@ func server(args []string) {
 
 	// Check the input before touching the CA or the filesystem, so that bad
 	// arguments leave nothing behind to clean up
-	cn := fs.Arg(0)
+	cn := *cnFlag
 	names, err := serverSANs(cn, splitSAN(*sans))
 	if err != nil {
 		log.Fatal(err)
