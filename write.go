@@ -13,8 +13,6 @@ import (
 
 type iaasID = types.ID
 
-var issuanceURL = types.CertificateAuthorityIssuanceMethods.URL
-
 func caCert(ctx context.Context, api iaas.CertificateAuthorityAPI, id iaasID) (*x509.Certificate, error) {
 	detail, err := api.Detail(ctx, id)
 	if err != nil {

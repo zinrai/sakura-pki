@@ -9,7 +9,7 @@ The tool never generates or writes a private key.
 ```
 sakura-pki list-ca        list the CAs in this account with their fingerprints
 sakura-pki export-ca      write the CA certificate to a file
-sakura-pki issue-client   issue an enrolment URL per user
+sakura-pki issue-client   have the CA mail an enrolment URL to a user
 sakura-pki issue-server   issue a certificate for a CSR
 sakura-pki revoke-client  revoke a client certificate
 sakura-pki revoke-server  revoke a server certificate
@@ -36,12 +36,9 @@ export SAKURACLOUD_ACCESS_TOKEN_SECRET=...
 export SAKURA_PKI_CA_FINGERPRINT=...
 ```
 
-A fingerprint that no CA in the account has stops every command.
-
 ## Find the CA
 
-`list-ca` needs only the credentials. Record the fingerprint of the CA you
-mean, and set it wherever the tool is run.
+`list-ca` needs only the credentials.
 
 ```
 $ sakura-pki list-ca
@@ -56,10 +53,7 @@ $ sakura-pki list-ca
 ]
 ```
 
-## Take the CA certificate
-
-Both sides of a mutually authenticated connection need it. Nothing is issued,
-so it can be run at any time.
+## Export the CA certificate
 
 ```
 $ sakura-pki export-ca -out ca.crt
@@ -96,13 +90,8 @@ $ sakura-pki issue-server -csr proxy.csr
 }
 ```
 
-Leave `proxy.key` where you made it.
-
-The common name comes from the CSR. `-cn` is for a CSR that has no common name,
-or one whose name is not the one to issue under. The country and organisation
-come from the CA's own certificate.
-
-`-out` names the file. It defaults to `<CN>.crt` in the current directory.
+The common name comes from the CSR, and the country and organisation from the
+CA's own certificate.
 
 `-san` adds DNS names on top of the CN, which is always included. IP addresses
 are rejected, so reach such a host by name.
@@ -113,17 +102,21 @@ name that was asked for.
 ## Issue client certificates
 
 ```
-$ sakura-pki issue-client -cn alice
+$ sakura-pki issue-client -cn alice -email alice@example.com
 {
   "cn": "alice",
   "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-  "url": "https://pki.example/public/issue/client/<one-time-token>/"
+  "email": "alice@example.com"
 }
 ```
 
-Hand the URL to that user. Nothing is written to disk.
+The CA mails an enrolment URL to the address.
 
-The user opens it, generates a key pair in the browser, and saves a PKCS#12 with
+A name that already has a certificate, or an enrolment URL still waiting, is
+reported on stderr and left alone, so the command can be run for everyone as
+often as the list of people changes. Only what was sent reaches stdout.
+
+The user opens the URL, generates a key pair in the browser, and saves a PKCS#12 with
 a passphrase of their choosing. The page works once, so a user who closes it
 needs a new URL.
 
@@ -135,40 +128,6 @@ openssl pkcs12 -legacy -in alice.p12 -clcerts -nokeys -out alice.crt
 openssl pkcs12 -legacy -in alice.p12 -nocerts -nodes  -out alice.key
 ```
 
-## Issue for a list of people
-
-A name that already has a certificate is reported and left alone, so the same
-list can be run through as often as it changes.
-
-```
-$ while read -r cn; do sakura-pki issue-client -cn "$cn"; done < roster.txt > urls.json
-CA: example-ca (Example Client CA, id=123456789012)
-alice: already has a client certificate (id=aaaa state=available not_after=2027-03-01T00:00:00Z)
-CA: example-ca (Example Client CA, id=123456789012)
-bob: an enrolment URL is waiting to be used (id=bbbb state=approved)
-CA: example-ca (Example Client CA, id=123456789012)
-carol: renewing, the current certificate is left to expire (id=cccc state=available not_after=2026-10-10T00:00:00Z)
-CA: example-ca (Example Client CA, id=123456789012)
-```
-
-Only what was issued reaches stdout, one JSON object per enrolment URL, so what
-a run captures is the enrolment URLs and nothing else.
-
-The same run renews. See [Renewal](#renewal).
-
-## What the server and the client need
-
-The server:
-
-- `proxy.example.internal.crt`
-- `proxy.key`, still where you made it
-- `ca.crt`, if it verifies client certificates
-
-The client:
-
-- `alice.crt` and `alice.key`, from the PKCS#12 they downloaded
-- `ca.crt`
-
 ## Renewal
 
 Issuing for a name that already has a certificate stops, unless that
@@ -176,7 +135,7 @@ certificate has 30 days or a third of its lifetime left, whichever is shorter.
 Then a new one is issued beside it, and the old one is left to run out on its
 date.
 
-For a client, running the roster is the renewal. For a server, run
+For a client, running `issue-client` again is the renewal. For a server, run
 `issue-server` again. The CSR may be new or the one used before.
 
 Outside that window, issuing stops and names the command that clears the way:
@@ -187,8 +146,6 @@ proxy.example.internal: a server certificate is in the way (id=1111 state=availa
   not_after=2027-09-25T00:00:00Z). To replace it, run
   sakura-pki revoke-server -cn proxy.example.internal
 ```
-
-Nothing is written and nothing is issued.
 
 ### When issue-server stops waiting
 
@@ -222,7 +179,7 @@ Revoke, then issue. Once revoked, the name has no certificate, so the next
 
 ```
 sakura-pki revoke-client -cn alice
-sakura-pki issue-client -cn alice
+sakura-pki issue-client -cn alice -email alice@example.com
 ```
 
 ## List
@@ -252,10 +209,6 @@ still waiting for its user, `hold` while suspended, `revoked` after revocation
 and `denied` after a pending enrolment was cancelled. An enrolment nobody has
 collected has no serial number and no expiry. A certificate past its date stays
 `available` and carries `"expired": true`.
-
-## Lifetime
-
-`-days` defaults to 365.
 
 ## License
 
