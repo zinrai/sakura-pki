@@ -46,19 +46,12 @@ func revoke(kind string, args []string) {
 		log.Fatalf("%s: no live %s certificate has this name", *cn, kind)
 	}
 
-	// Carry on past a failure so that one refusal does not leave the rest in place
-	failed := false
 	for _, c := range live {
 		done, err := revokeOne(ctx, api, caid, kind, c)
 		if err != nil {
-			log.Printf("%s: could not revoke (%s): %v", *cn, describe(c), err)
-			failed = true
-			continue
+			log.Fatalf("%s: could not revoke (%s): %v", *cn, describe(c), err)
 		}
 		fmt.Fprintf(os.Stderr, "%s: %s %s %s\n", done, kind, *cn, describe(c))
-	}
-	if failed {
-		os.Exit(1)
 	}
 }
 

@@ -51,16 +51,10 @@ func denyClient(args []string) {
 		log.Fatalf("%s: no enrolment URL is waiting to be used", *cn)
 	}
 
-	failed := false
 	for _, c := range pending {
 		if err := api.DenyClient(ctx, caid, c.ID); err != nil {
-			log.Printf("%s: could not deny (%s): %v", *cn, describe(c), err)
-			failed = true
-			continue
+			log.Fatalf("%s: could not deny (%s): %v", *cn, describe(c), err)
 		}
 		fmt.Fprintf(os.Stderr, "denied: client %s %s\n", *cn, describe(c))
-	}
-	if failed {
-		os.Exit(1)
 	}
 }
