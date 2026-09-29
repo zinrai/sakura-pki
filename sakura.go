@@ -1,8 +1,10 @@
 package main
 
 import (
-	"flag"
+	"context"
+	"crypto/x509"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -11,12 +13,29 @@ import (
 	"github.com/sacloud/sacloud-sdk-go/common/saclient"
 )
 
-// newAPI leaves credential resolution to saclient rather than reading the
-// environment here, so that API keys and service principals keep being told
-// apart the way the SDK documents.
-//
-// Managed PKI is zone independent and the SDK fills the default zone into the
-// URL, so there is no zone to pass.
+// The CA is printed on stderr because an environment variable picks it and
+// nothing on stdout names it.
+func connect() (iaas.CertificateAuthorityAPI, iaasID, *x509.Certificate) {
+	id, err := caID()
+	if err != nil {
+		log.Fatal(err)
+	}
+	api, err := newAPI()
+	if err != nil {
+		log.Fatal(err)
+	}
+	cert, err := caCert(context.Background(), api, id)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Fprintf(os.Stderr, "CA: %s (id=%s)\n", cert.Subject.CommonName, id)
+	return api, id, cert
+}
+
+// Credentials are left to saclient rather than read here, so that API keys and
+// service principals are told apart as the SDK documents. No zone is passed
+// because Managed PKI is global.
 func newAPI() (iaas.CertificateAuthorityAPI, error) {
 	var sc saclient.Client
 	if err := sc.SetEnviron(os.Environ()); err != nil {
@@ -31,28 +50,24 @@ func newAPI() (iaas.CertificateAuthorityAPI, error) {
 type subject struct {
 	country string
 	org     string
-	ou      stringList
 }
 
-func (s *subject) bind(fs *flag.FlagSet) {
-	fs.StringVar(&s.country, "country", "", "Country")
-	fs.StringVar(&s.org, "org", "", "Organization")
-	fs.Var(&s.ou, "ou", "Organizational Unit (repeatable)")
+// Not a flag: this CA serves one installation, so what it issues shares its
+// organisation, and a flag would only let one certificate silently disagree.
+// The CA's organisational unit is not the holder's, so it is left out.
+func subjectOf(cert *x509.Certificate) subject {
+	var s subject
+	if len(cert.Subject.Country) > 0 {
+		s.country = cert.Subject.Country[0]
+	}
+	if len(cert.Subject.Organization) > 0 {
+		s.org = cert.Subject.Organization[0]
+	}
+	return s
 }
 
-type stringList []string
-
-func (l *stringList) String() string { return fmt.Sprint(*l) }
-
-func (l *stringList) Set(v string) error {
-	*l = append(*l, v)
-	return nil
-}
-
-// caIDEnv holds the CA id next to the credentials it belongs to. A CA id only
-// means anything against the account that owns it, so keeping the two in the
-// same place removes the chance of pairing one environment's credentials with
-// another environment's CA.
+// In the environment next to the credentials rather than in a flag, so that one
+// environment's credentials are not paired with another's CA.
 const caIDEnv = "SAKURA_PKI_CA_ID"
 
 func caID() (types.ID, error) {
@@ -67,6 +82,6 @@ func caID() (types.ID, error) {
 	return id, nil
 }
 
-func notAfter(ttl time.Duration) time.Time {
-	return time.Now().Add(ttl)
+func notAfter(days int) time.Time {
+	return time.Now().AddDate(0, 0, days)
 }

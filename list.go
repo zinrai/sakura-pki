@@ -7,16 +7,18 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
+	"time"
 
 	"github.com/sacloud/sacloud-sdk-go/api/iaas"
 )
 
-func list(args []string) {
-	fs := flag.NewFlagSet("list", flag.ExitOnError)
+// Two commands rather than a filter, since the client certificates are the ones
+// asked about. Entries keep their kind so that two listings can be merged.
+func list(kind string, args []string) {
+	fs := flag.NewFlagSet("list-"+kind, flag.ExitOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: sakura-pki list\n\n")
-		fmt.Fprintf(os.Stderr, "Print issued certificates as JSON. Revocation takes the ids.\n")
+		fmt.Fprintf(os.Stderr, "usage: sakura-pki list-%s\n\n", kind)
+		fmt.Fprintf(os.Stderr, "Print the %s certificates of this CA as JSON.\n", kind)
 	}
 	fs.Parse(args)
 
@@ -24,89 +26,114 @@ func list(args []string) {
 		fs.Usage()
 		os.Exit(2)
 	}
-	id, err := caID()
+	api, id, _ := connect()
+
+	certs, err := listCerts(context.Background(), api, id, kind)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	api, err := newAPI()
-	if err != nil {
-		log.Fatal(err)
+	if certs == nil {
+		certs = []certEntry{}
 	}
-	ctx := context.Background()
-
-	// One array rather than one per kind, so that a filter over everything is a
-	// single jq expression
-	all := []certEntry{}
-	for _, kind := range []string{"clients", "servers"} {
-		certs, err := listCerts(ctx, api, id, kind)
-		if err != nil {
-			log.Fatal(err)
-		}
-		all = append(all, certs...)
-	}
-
-	printJSON(all)
+	printJSON(certs)
 }
 
-// pageSize is what we ask for per request. The API caps a page at some size of
-// its own, which is why the result is still paged through rather than fetched in
-// one go.
+// The API caps a page on its own, so even a large Count needs paging.
 const pageSize = 100
 
-// certEntry is the part of a listed certificate this tool uses.
-//
-// The tags are spelled out because the API sends snake_case. Go matches field
-// names case insensitively, so id and subject would bind without them, but
-// issue_state would not, and a silently empty state would make every revoked
-// certificate look like it still holds its name.
+// The expiry is flattened out because it ends a certificate for everyone, while
+// a revocation counts only where the CRL is checked. A pending enrolment gets no
+// date rather than a zero one. Expired is worked out here because the CA leaves
+// an expired certificate available.
 type certEntry struct {
-	Kind       string `json:"kind"`
-	ID         string `json:"id"`
-	IssueState string `json:"issue_state"`
-	Subject    string `json:"subject"`
+	Kind         string `json:"kind"`
+	ID           string `json:"id"`
+	IssueState   string `json:"issue_state"`
+	Subject      string `json:"subject"`
+	SerialNumber string `json:"serial_number,omitempty"`
+	NotAfter     string `json:"not_after,omitempty"`
+	Expired      bool   `json:"expired,omitempty"`
+
+	notBefore time.Time
+	notAfter  time.Time
 }
 
-// listCerts pages through the clients or servers of a CA.
-//
-// It does not use the SDK's ListClients and ListServers because those send no
-// request body, so the API applies its default page size of 10 and everything
-// past the tenth certificate is silently dropped. That is not only a short
-// listing: the check for a name that is already taken reads the same list, and
-// would stop finding duplicates once a CA holds more than ten certificates.
-//
-// Paging parameters go in the body of a GET, the way the SDK's own FindCondition
-// does it.
+// The tags are spelled out because Go would bind id without them but not
+// issue_state, and an empty state makes a revoked certificate look live.
+type listedCert struct {
+	ID              string `json:"id"`
+	Subject         string `json:"subject"`
+	IssueState      string `json:"issue_state"`
+	CertificateData *struct {
+		SerialNumber string    `json:"serial_number"`
+		NotBefore    time.Time `json:"not_before"`
+		NotAfter     time.Time `json:"not_after"`
+	} `json:"certificate_data"`
+}
+
+func (l listedCert) entry(kind string, now time.Time) certEntry {
+	e := certEntry{Kind: kind, ID: l.ID, IssueState: l.IssueState, Subject: l.Subject}
+	if d := l.CertificateData; d != nil {
+		e.SerialNumber = d.SerialNumber
+		e.notBefore = d.NotBefore.UTC()
+		e.notAfter = d.NotAfter.UTC()
+		if !d.NotAfter.IsZero() {
+			e.NotAfter = e.notAfter.Format(time.RFC3339)
+			e.Expired = !now.Before(d.NotAfter)
+		}
+	}
+	return e
+}
+
+// Not the SDK's ListClients and ListServers, which send no paging, so the API
+// returns ten and the check for a name in use misses the rest. Paging goes in
+// the body of a GET, as the SDK's own FindCondition does it.
 func listCerts(ctx context.Context, api iaas.CertificateAuthorityAPI, id iaasID, kind string) ([]certEntry, error) {
 	op, ok := api.(*iaas.CertificateAuthorityOp)
 	if !ok {
 		return nil, fmt.Errorf("unexpected API implementation %T", api)
 	}
-	url := fmt.Sprintf("%s/%s/%s/%s/%s/certificateauthority/%s",
+	url := fmt.Sprintf("%s/%s/%s/%s/%s/certificateauthority/%ss",
 		iaas.SakuraCloudAPIRoot, iaas.APIDefaultZone, op.PathSuffix, op.PathName, id, kind)
 
-	var out []certEntry
-	for {
-		data, err := op.Client.Do(ctx, "GET", url, map[string]any{"From": len(out), "Count": pageSize})
+	listed, err := pageThrough(func(from int) ([]listedCert, int, error) {
+		data, err := op.Client.Do(ctx, "GET", url, map[string]any{"From": from, "Count": pageSize})
 		if err != nil {
-			return nil, fmt.Errorf("could not list %s certificates: %w", kind, err)
+			return nil, 0, fmt.Errorf("could not list %s certificates: %w", kind, err)
 		}
 
 		var page struct {
 			Total                int
-			CertificateAuthority []certEntry
+			CertificateAuthority []listedCert
 		}
 		if err := json.Unmarshal(data, &page); err != nil {
-			return nil, fmt.Errorf("could not read the %s listing: %w", kind, err)
+			return nil, 0, fmt.Errorf("could not read the %s listing: %w", kind, err)
 		}
+		return page.CertificateAuthority, page.Total, nil
+	})
+	if err != nil {
+		return nil, err
+	}
 
-		for _, c := range page.CertificateAuthority {
-			c.Kind = strings.TrimSuffix(kind, "s")
-			out = append(out, c)
+	now := time.Now()
+	out := make([]certEntry, 0, len(listed))
+	for _, c := range listed {
+		out = append(out, c.entry(kind, now))
+	}
+	return out, nil
+}
+
+// Apart from the request so that it can be tested without the SDK.
+func pageThrough[T any](read func(from int) ([]T, int, error)) ([]T, error) {
+	var out []T
+	for {
+		items, total, err := read(len(out))
+		if err != nil {
+			return nil, err
 		}
-		// An empty page ends the loop even if Total disagrees, so a Total that
-		// never shrinks cannot spin here forever
-		if len(page.CertificateAuthority) == 0 || len(out) >= page.Total {
+		out = append(out, items...)
+		// An empty page ends it even if Total never shrinks
+		if len(items) == 0 || len(out) >= total {
 			return out, nil
 		}
 	}

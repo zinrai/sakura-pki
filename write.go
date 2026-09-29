@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,41 +11,56 @@ import (
 	"github.com/sacloud/sacloud-sdk-go/api/iaas/types"
 )
 
-// iaasID is an alias so that a CA id and a certificate id are not swapped in an
-// argument list. It is not there to hide the SDK type.
 type iaasID = types.ID
 
-const caCertName = "ca.crt"
-
-// issuanceURL keeps the key in the user's browser. The csr and public_key
-// methods would put a private key in the hands of whoever generated it, which
-// is the thing a managed CA is meant to avoid.
 var issuanceURL = types.CertificateAuthorityIssuanceMethods.URL
 
-func writeCACert(ctx context.Context, api iaas.CertificateAuthorityAPI, id iaasID, out string) (string, error) {
+func caCert(ctx context.Context, api iaas.CertificateAuthorityAPI, id iaasID) (*x509.Certificate, error) {
 	detail, err := api.Detail(ctx, id)
 	if err != nil {
-		return "", fmt.Errorf("could not fetch the CA certificate: %w", err)
+		return nil, fmt.Errorf("could not fetch the CA certificate: %w", err)
 	}
 	if detail.CertificateData == nil || detail.CertificateData.CertificatePEM == "" {
-		return "", fmt.Errorf("the CA certificate was empty")
+		return nil, fmt.Errorf("the CA certificate was empty")
 	}
-
-	if err := os.MkdirAll(out, 0o755); err != nil {
-		return "", err
-	}
-
-	path := filepath.Join(out, caCertName)
-	return path, os.WriteFile(path, []byte(detail.CertificateData.CertificatePEM), 0o644)
+	return parseCert(detail.CertificateData.CertificatePEM)
 }
 
-// writeCert writes with 0644 because everything this tool writes is public.
-// No private key is generated, so there is nothing here to protect with 0600.
-func writeCert(out, dir, name, certPEM string) (string, error) {
-	d := filepath.Join(out, dir)
-	if err := os.MkdirAll(d, 0o755); err != nil {
-		return "", err
+// The caller names the file rather than a layout of this tool's own, since it is
+// installed by hand. 0644 because nothing written is secret. A temporary file
+// renamed into place, so that a failure never leaves a server a truncated
+// certificate.
+func writePEM(path, pem string) (err error) {
+	dir := filepath.Dir(path)
+	if dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
 	}
-	path := filepath.Join(d, name+".crt")
-	return path, os.WriteFile(path, []byte(certPEM), 0o644)
+
+	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			f.Close()
+			os.Remove(f.Name())
+		}
+	}()
+
+	if _, err := f.WriteString(pem); err != nil {
+		return err
+	}
+	// CreateTemp makes the file 0600
+	if err := f.Chmod(0o644); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }

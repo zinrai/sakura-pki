@@ -11,94 +11,86 @@ import (
 	"github.com/sacloud/sacloud-sdk-go/api/iaas"
 )
 
-func client(args []string) {
-	fs := flag.NewFlagSet("client", flag.ExitOnError)
-	var cns stringList
-	fs.Var(&cns, "cn", "common name of the certificate (repeatable)")
-	ttl := fs.Duration("ttl", 8760*time.Hour, "certificate lifetime")
-	force := fs.Bool("force", false, "issue even if a live certificate for this name exists")
-	var sub subject
-	sub.bind(fs)
+func issueClient(args []string) {
+	fs := flag.NewFlagSet("issue-client", flag.ExitOnError)
+	cnFlag := fs.String("cn", "", "common name of the certificate")
+	days := fs.Int("days", 365, "certificate lifetime in days")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: sakura-pki client -cn <CN> [-cn <CN>...] [flags]\n\n")
-		fmt.Fprintf(os.Stderr, "Issue an enrolment URL per user. The key is generated in the user's\n")
+		fmt.Fprintf(os.Stderr, "usage: sakura-pki issue-client -cn <CN> [flags]\n\n")
+		fmt.Fprintf(os.Stderr, "Issue an enrolment URL for one user. The key is generated in their\n")
 		fmt.Fprintf(os.Stderr, "browser and reaches neither this tool nor the CA.\n\n")
+		fmt.Fprintf(os.Stderr, "A name that already has a certificate is reported and left alone, unless\n")
+		fmt.Fprintf(os.Stderr, "it is about to expire, in which case a new one is issued beside it. So this\n")
+		fmt.Fprintf(os.Stderr, "can be run over a list of people as often as the list changes, and it\n")
+		fmt.Fprintf(os.Stderr, "renews as it goes. To replace a certificate that is not about to expire,\n")
+		fmt.Fprintf(os.Stderr, "revoke-client it first.\n\n")
 		fs.PrintDefaults()
 	}
 	fs.Parse(args)
 
-	if len(cns) == 0 || fs.NArg() != 0 {
+	if *cnFlag == "" || fs.NArg() != 0 {
 		fs.Usage()
 		os.Exit(2)
 	}
-	id, err := caID()
-	if err != nil {
-		log.Fatal(err)
-	}
+	cn := *cnFlag
 
-	api, err := newAPI()
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	api, caid, cert := connect()
 	ctx := context.Background()
-	// Check every name first, so that a clash on the third name does not leave
-	// the first two already issued
-	if !*force {
-		for _, cn := range cns {
-			in, err := cnInUse(ctx, api, id, "clients", cn)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if in != nil {
-				log.Fatal(inUseError(cn, in))
-			}
+
+	live, err := liveCerts(ctx, api, caid, clientKind, cn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Reported rather than failed, since a roster run meets this for almost
+	// everyone, and kept off stdout so a run captures only the URLs
+	if held := holding(live, time.Now()); len(held) > 0 {
+		if held[0].IssueState == pendingState {
+			fmt.Fprintf(os.Stderr, "%s: an enrolment URL is waiting to be used (%s)\n", cn, describe(held[0]))
+		} else {
+			fmt.Fprintf(os.Stderr, "%s: already has a client certificate (%s)\n", cn, describe(held[0]))
 		}
+		return
+	}
+	for _, c := range live {
+		fmt.Fprintf(os.Stderr, "%s: renewing, the current certificate is left to expire (%s)\n", cn, describe(c))
 	}
 
-	issued, err := issueClients(ctx, api, id, notAfter(*ttl), sub, cns)
+	issued, err := requestClient(ctx, api, caid, notAfter(*days), subjectOf(cert), cn)
 	if err != nil {
 		log.Fatal(err)
 	}
 	printJSON(issued)
 }
 
-// enrolment is what an operator hands to a user.
 type enrolment struct {
 	CN  string `json:"cn"`
 	ID  string `json:"id"`
 	URL string `json:"url"`
 }
 
-// issueClients has no csr or public_key path. Both would leave the private key
-// with whoever generated it, which is what using a managed CA is meant to avoid.
-// A machine that needs a client certificate cannot press a button in a browser,
-// so a way to submit a CSR would have to be added when that case appears.
-func issueClients(ctx context.Context, api iaas.CertificateAuthorityAPI, id iaasID, na time.Time, sub subject, names []string) ([]enrolment, error) {
-	out := []enrolment{}
-	for _, cn := range names {
-		added, err := api.AddClient(ctx, id, &iaas.CertificateAuthorityAddClientParam{
-			Country:          sub.country,
-			Organization:     sub.org,
-			OrganizationUnit: sub.ou,
-			CommonName:       cn,
-			NotAfter:         na,
-			IssuanceMethod:   issuanceURL,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("%s: could not request issuance: %w", cn, err)
-		}
-
-		// AddClient returns only an id, so the URL comes from ReadClient
-		c, err := api.ReadClient(ctx, id, added.ID)
-		if err != nil {
-			return nil, fmt.Errorf("%s: could not read the enrolment URL: %w", cn, err)
-		}
-		if c.URL == "" {
-			return nil, fmt.Errorf("%s: the enrolment URL was empty (IssueState=%q)", cn, c.IssueState)
-		}
-
-		out = append(out, enrolment{CN: cn, ID: added.ID, URL: c.URL})
+// Only the URL method: csr and public_key would leave the private key with
+// whoever made it. A machine that needs a client certificate will need a CSR
+// path added.
+func requestClient(ctx context.Context, api iaas.CertificateAuthorityAPI, id iaasID, na time.Time, sub subject, cn string) (*enrolment, error) {
+	added, err := api.AddClient(ctx, id, &iaas.CertificateAuthorityAddClientParam{
+		Country:        sub.country,
+		Organization:   sub.org,
+		CommonName:     cn,
+		NotAfter:       na,
+		IssuanceMethod: issuanceURL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%s: could not request issuance: %w", cn, err)
 	}
-	return out, nil
+
+	// AddClient returns only an id, so the URL comes from ReadClient
+	c, err := api.ReadClient(ctx, id, added.ID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: could not read the enrolment URL: %w", cn, err)
+	}
+	if c.URL == "" {
+		return nil, fmt.Errorf("%s: the enrolment URL was empty (IssueState=%q)", cn, c.IssueState)
+	}
+
+	return &enrolment{CN: cn, ID: added.ID, URL: c.URL}, nil
 }

@@ -1,21 +1,20 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"time"
 )
 
-// Issuing refuses a name that already has a live certificate, so folding this
-// back into server or client would put the CA certificate out of reach once
-// everything has been issued.
-func ca(args []string) {
-	fs := flag.NewFlagSet("ca", flag.ExitOnError)
-	out := fs.String("out", "./out", "output directory")
+// Not part of issue-server, which refuses a name already taken and so would put
+// the CA certificate out of reach once everything has been issued.
+func getCA(args []string) {
+	fs := flag.NewFlagSet("get-ca", flag.ExitOnError)
+	out := fs.String("out", "ca.crt", "file to write the CA certificate to")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: sakura-pki ca [flags]\n\n")
+		fmt.Fprintf(os.Stderr, "usage: sakura-pki get-ca [flags]\n\n")
 		fmt.Fprintf(os.Stderr, "Write the CA certificate. Nothing is issued.\n\n")
 		fs.PrintDefaults()
 	}
@@ -26,21 +25,21 @@ func ca(args []string) {
 		os.Exit(2)
 	}
 
-	id, err := caID()
-	if err != nil {
+	_, _, cert := connect()
+	if err := writePEM(*out, pemOf(cert)); err != nil {
 		log.Fatal(err)
 	}
 
-	api, err := newAPI()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	path, err := writeCACert(context.Background(), api, id, *out)
-	if err != nil {
-		log.Fatal(err)
-	}
+	// The fingerprint lets a host check that the ca.crt it holds is this CA's
 	printJSON(struct {
 		CACertificate string `json:"ca_certificate"`
-	}{path})
+		Subject       string `json:"subject"`
+		NotAfter      string `json:"not_after"`
+		Fingerprint   string `json:"fingerprint_sha256"`
+	}{
+		CACertificate: *out,
+		Subject:       cert.Subject.String(),
+		NotAfter:      cert.NotAfter.UTC().Format(time.RFC3339),
+		Fingerprint:   fingerprint(cert),
+	})
 }

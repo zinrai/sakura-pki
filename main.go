@@ -1,14 +1,18 @@
 // sakura-pki issues server and client certificates from SAKURA Cloud Managed PKI.
-//
-// It never generates or writes a private key. Server certificates are issued
-// against a CSR made on the host that will hold the key. Client certificates are
-// issued as an enrolment URL, and the key is generated in the user's browser.
+// It never generates or writes a private key.
 package main
 
 import (
 	"fmt"
 	"log"
 	"os"
+)
+
+// The kind is part of the command name rather than a flag, so that each command
+// has only the flags that apply to it.
+const (
+	clientKind = "client"
+	serverKind = "server"
 )
 
 func main() {
@@ -21,18 +25,22 @@ func main() {
 
 	args := os.Args[2:]
 	switch os.Args[1] {
-	case "ca":
-		ca(args)
-	case "server":
-		server(args)
-	case "client":
-		client(args)
-	case "list":
-		list(args)
-	case "revoke":
-		revoke(args)
-	case "deny":
-		deny(args)
+	case "get-ca":
+		getCA(args)
+	case "issue-client":
+		issueClient(args)
+	case "issue-server":
+		issueServer(args)
+	case "revoke-client":
+		revoke(clientKind, args)
+	case "revoke-server":
+		revoke(serverKind, args)
+	case "deny-client":
+		denyClient(args)
+	case "list-client":
+		list(clientKind, args)
+	case "list-server":
+		list(serverKind, args)
 	case "version":
 		printVersion()
 	default:
@@ -42,14 +50,17 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: sakura-pki <command> [args]\n\n")
-	fmt.Fprintf(os.Stderr, "  ca      write the CA certificate\n")
-	fmt.Fprintf(os.Stderr, "  server  issue a server certificate for a CSR\n")
-	fmt.Fprintf(os.Stderr, "  client  issue an enrolment URL for a client certificate\n")
-	fmt.Fprintf(os.Stderr, "  list    list issued certificates\n")
-	fmt.Fprintf(os.Stderr, "  revoke  revoke an issued certificate\n")
-	fmt.Fprintf(os.Stderr, "  deny    cancel a client enrolment URL that was never used\n")
-	fmt.Fprintf(os.Stderr, "  version print version and exit\n\n")
-	fmt.Fprintf(os.Stderr, "Run <command> -h for its arguments.\n")
-	fmt.Fprintf(os.Stderr, "Credentials come from the environment: an API key or a service principal.\n")
+	fmt.Fprintf(os.Stderr, "usage: sakura-pki <command> [flags]\n\n")
+	fmt.Fprintf(os.Stderr, "  get-ca         write the CA certificate to a file\n")
+	fmt.Fprintf(os.Stderr, "  issue-client   issue an enrolment URL per user\n")
+	fmt.Fprintf(os.Stderr, "  issue-server   issue a certificate for a CSR\n")
+	fmt.Fprintf(os.Stderr, "  revoke-client  revoke a client certificate\n")
+	fmt.Fprintf(os.Stderr, "  revoke-server  revoke a server certificate\n")
+	fmt.Fprintf(os.Stderr, "  deny-client    cancel an enrolment URL that was never used\n")
+	fmt.Fprintf(os.Stderr, "  list-client    list client certificates and enrolments\n")
+	fmt.Fprintf(os.Stderr, "  list-server    list server certificates\n")
+	fmt.Fprintf(os.Stderr, "  version        print version and exit\n\n")
+	fmt.Fprintf(os.Stderr, "Run a command with -h for its flags.\n")
+	fmt.Fprintf(os.Stderr, "Credentials come from the environment. An API key works, or a service principal.\n")
+	fmt.Fprintf(os.Stderr, "The CA is the one whose id is in SAKURA_PKI_CA_ID.\n")
 }

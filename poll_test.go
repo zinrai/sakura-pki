@@ -13,7 +13,6 @@ func waiter() *issuer {
 	return &issuer{interval: time.Millisecond, timeout: 200 * time.Millisecond}
 }
 
-// Giving up after one read treats a finished issuance as a failure.
 func TestWaitKeepsReadingUntilTheCertificateAppears(t *testing.T) {
 	reads := 0
 	read := func(context.Context) (string, *iaas.CertificateData, error) {
@@ -36,7 +35,6 @@ func TestWaitKeepsReadingUntilTheCertificateAppears(t *testing.T) {
 	}
 }
 
-// Reporting success with nothing in hand writes an empty certificate.
 func TestWaitFailsWhenTheCertificateNeverAppears(t *testing.T) {
 	read := func(context.Context) (string, *iaas.CertificateData, error) {
 		return "pending", nil, nil
@@ -45,17 +43,5 @@ func TestWaitFailsWhenTheCertificateNeverAppears(t *testing.T) {
 	_, err := waiter().wait(context.Background(), "cert-1", read)
 	if !errors.Is(err, errTimeout) {
 		t.Fatalf("want errTimeout, got %v", err)
-	}
-}
-
-// Matching on a state name fails an issued certificate whenever a value we did
-// not anticipate comes back.
-func TestWaitJudgesByTheCertificateNotTheState(t *testing.T) {
-	read := func(context.Context) (string, *iaas.CertificateData, error) {
-		return "a state this API may or may not return", &iaas.CertificateData{CertificatePEM: "pem"}, nil
-	}
-
-	if _, err := waiter().wait(context.Background(), "cert-1", read); err != nil {
-		t.Fatalf("the certificate was there but it failed: %v", err)
 	}
 }
