@@ -8,7 +8,7 @@ import (
 
 func TestWritePEMReplacesTheFileAs0644WithNoTemporaryFileLeft(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "sub", "proxy.crt")
+	path := filepath.Join(dir, "proxy.crt")
 
 	if err := writePEM(path, "old"); err != nil {
 		t.Fatal(err)

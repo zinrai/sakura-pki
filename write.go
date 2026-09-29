@@ -31,14 +31,7 @@ func caCert(ctx context.Context, api iaas.CertificateAuthorityAPI, id iaasID) (*
 // renamed into place, so that a failure never leaves a server a truncated
 // certificate.
 func writePEM(path, pem string) (err error) {
-	dir := filepath.Dir(path)
-	if dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
-	}
-
-	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
 	if err != nil {
 		return err
 	}
