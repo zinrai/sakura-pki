@@ -49,9 +49,6 @@ func writePEM(path, pem string) (err error) {
 	if err := f.Chmod(0o644); err != nil {
 		return err
 	}
-	if err := f.Sync(); err != nil {
-		return err
-	}
 	if err := f.Close(); err != nil {
 		return err
 	}
