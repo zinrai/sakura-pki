@@ -7,6 +7,7 @@ The tool never generates or writes a private key.
 ## Commands
 
 ```
+sakura-pki list-ca        list the CAs in this account with their fingerprints
 sakura-pki get-ca         write the CA certificate to a file
 sakura-pki issue-client   issue an enrolment URL per user
 sakura-pki issue-server   issue a certificate for a CSR
@@ -21,17 +22,38 @@ sakura-pki version        print version and exit
 Every command prints the CA it reached on stderr:
 
 ```
-CA: Example Client CA (id=113400978108)
+CA: example-ca (Example Client CA, id=123456789012)
 ```
 
 ## Environment
 
-Either an API key or a service principal works. The CA must already exist.
+Either an API key or a service principal works. The CA must already exist, and
+is named by the SHA-256 fingerprint of its certificate.
 
 ```
 export SAKURACLOUD_ACCESS_TOKEN=...
 export SAKURACLOUD_ACCESS_TOKEN_SECRET=...
-export SAKURA_PKI_CA_ID=...
+export SAKURA_PKI_CA_FINGERPRINT=...
+```
+
+A fingerprint that no CA in the account has stops every command.
+
+## Find the CA
+
+`list-ca` needs only the credentials. Record the fingerprint of the CA you
+mean, and set it wherever the tool is run.
+
+```
+$ sakura-pki list-ca
+[
+  {
+    "id": "123456789012",
+    "name": "example-ca",
+    "subject": "CN=Example Client CA,O=Example Inc.,C=JP",
+    "not_after": "2035-01-01T00:00:00Z",
+    "fingerprint_sha256": "AA:BB:CC:..."
+  }
+]
 ```
 
 ## Take the CA certificate
@@ -120,13 +142,13 @@ list can be run through as often as it changes.
 
 ```
 $ while read -r cn; do sakura-pki issue-client -cn "$cn"; done < roster.txt > urls.json
-CA: Example Client CA (id=113400978108)
+CA: example-ca (Example Client CA, id=123456789012)
 alice: already has a client certificate (id=aaaa state=available not_after=2027-03-01T00:00:00Z)
-CA: Example Client CA (id=113400978108)
+CA: example-ca (Example Client CA, id=123456789012)
 bob: an enrolment URL is waiting to be used (id=bbbb state=approved)
-CA: Example Client CA (id=113400978108)
+CA: example-ca (Example Client CA, id=123456789012)
 carol: renewing, the current certificate is left to expire (id=cccc state=available not_after=2026-10-10T00:00:00Z)
-CA: Example Client CA (id=113400978108)
+CA: example-ca (Example Client CA, id=123456789012)
 ```
 
 Only what was issued reaches stdout, one JSON object per enrolment URL, so what

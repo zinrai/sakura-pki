@@ -9,28 +9,74 @@ import (
 	"time"
 
 	"github.com/sacloud/sacloud-sdk-go/api/iaas"
-	"github.com/sacloud/sacloud-sdk-go/api/iaas/types"
 	"github.com/sacloud/sacloud-sdk-go/common/saclient"
 )
 
-// The CA is printed on stderr because an environment variable picks it and
-// nothing on stdout names it.
+// By fingerprint rather than id: a wrong id works on another CA without a word,
+// while a wrong fingerprint matches nothing and stops.
+const caFingerprintEnv = "SAKURA_PKI_CA_FINGERPRINT"
+
+// The CA's name is printed as well as its common name, since two CAs in one
+// account can share a common name.
 func connect() (iaas.CertificateAuthorityAPI, iaasID, *x509.Certificate) {
-	id, err := caID()
-	if err != nil {
-		log.Fatal(err)
+	want := os.Getenv(caFingerprintEnv)
+	if want == "" {
+		log.Fatalf("%s is not set. Run sakura-pki list-ca to find it", caFingerprintEnv)
 	}
 	api, err := newAPI()
 	if err != nil {
 		log.Fatal(err)
 	}
-	cert, err := caCert(context.Background(), api, id)
+	cas, err := listCAs(context.Background(), api)
+	if err != nil {
+		log.Fatal(err)
+	}
+	ca, err := pickCA(cas, want)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Fprintf(os.Stderr, "CA: %s (id=%s)\n", cert.Subject.CommonName, id)
-	return api, id, cert
+	fmt.Fprintf(os.Stderr, "CA: %s (%s, id=%s)\n", ca.name, ca.cert.Subject.CommonName, ca.id)
+	return api, ca.id, ca.cert
+}
+
+type caEntry struct {
+	id   iaasID
+	name string
+	cert *x509.Certificate
+}
+
+func listCAs(ctx context.Context, api iaas.CertificateAuthorityAPI) ([]caEntry, error) {
+	found, err := pageThrough(func(from int) ([]*iaas.CertificateAuthority, int, error) {
+		res, err := api.Find(ctx, &iaas.FindCondition{From: from, Count: pageSize})
+		if err != nil {
+			return nil, 0, fmt.Errorf("could not list the CAs: %w", err)
+		}
+		return res.CertificateAuthorities, res.Total, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]caEntry, 0, len(found))
+	for _, c := range found {
+		cert, err := caCert(ctx, api, c.ID)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", c.ID, err)
+		}
+		out = append(out, caEntry{id: c.ID, name: c.Name, cert: cert})
+	}
+	return out, nil
+}
+
+func pickCA(cas []caEntry, want string) (*caEntry, error) {
+	for i, c := range cas {
+		if fingerprint(c.cert) == want {
+			return &cas[i], nil
+		}
+	}
+	return nil, fmt.Errorf("no CA in this account has the fingerprint in %s. Run\n"+
+		"  sakura-pki list-ca\nto see the ones there are", caFingerprintEnv)
 }
 
 // Credentials are left to saclient rather than read here, so that API keys and
@@ -64,22 +110,6 @@ func subjectOf(cert *x509.Certificate) subject {
 		s.org = cert.Subject.Organization[0]
 	}
 	return s
-}
-
-// In the environment next to the credentials rather than in a flag, so that one
-// environment's credentials are not paired with another's CA.
-const caIDEnv = "SAKURA_PKI_CA_ID"
-
-func caID() (types.ID, error) {
-	v := os.Getenv(caIDEnv)
-	if v == "" {
-		return 0, fmt.Errorf("%s is not set", caIDEnv)
-	}
-	id := types.StringID(v)
-	if id.IsEmpty() {
-		return 0, fmt.Errorf("%s is not a valid CA id: %q", caIDEnv, v)
-	}
-	return id, nil
 }
 
 func notAfter(days int) time.Time {
