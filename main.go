@@ -27,8 +27,8 @@ func main() {
 	switch os.Args[1] {
 	case "list-ca":
 		listCA(args)
-	case "get-ca":
-		getCA(args)
+	case "export-ca":
+		exportCA(args)
 	case "issue-client":
 		issueClient(args)
 	case "issue-server":
@@ -54,7 +54,7 @@ func main() {
 func usage() {
 	fmt.Fprintf(os.Stderr, "usage: sakura-pki <command> [flags]\n\n")
 	fmt.Fprintf(os.Stderr, "  list-ca        list the CAs in this account with their fingerprints\n")
-	fmt.Fprintf(os.Stderr, "  get-ca         write the CA certificate to a file\n")
+	fmt.Fprintf(os.Stderr, "  export-ca      write the CA certificate to a file\n")
 	fmt.Fprintf(os.Stderr, "  issue-client   issue an enrolment URL per user\n")
 	fmt.Fprintf(os.Stderr, "  issue-server   issue a certificate for a CSR\n")
 	fmt.Fprintf(os.Stderr, "  revoke-client  revoke a client certificate\n")

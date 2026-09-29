@@ -11,11 +11,11 @@ import (
 
 // Not part of issue-server, which refuses a name already taken and so would put
 // the CA certificate out of reach once everything has been issued.
-func getCA(args []string) {
-	fs := flag.NewFlagSet("get-ca", flag.ExitOnError)
+func exportCA(args []string) {
+	fs := flag.NewFlagSet("export-ca", flag.ExitOnError)
 	out := fs.String("out", "ca.crt", "file to write the CA certificate to")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: sakura-pki get-ca [flags]\n\n")
+		fmt.Fprintf(os.Stderr, "usage: sakura-pki export-ca [flags]\n\n")
 		fmt.Fprintf(os.Stderr, "Write the CA certificate. Nothing is issued.\n\n")
 		fs.PrintDefaults()
 	}

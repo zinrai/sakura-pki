@@ -8,7 +8,7 @@ The tool never generates or writes a private key.
 
 ```
 sakura-pki list-ca        list the CAs in this account with their fingerprints
-sakura-pki get-ca         write the CA certificate to a file
+sakura-pki export-ca      write the CA certificate to a file
 sakura-pki issue-client   issue an enrolment URL per user
 sakura-pki issue-server   issue a certificate for a CSR
 sakura-pki revoke-client  revoke a client certificate
@@ -62,7 +62,7 @@ Both sides of a mutually authenticated connection need it. Nothing is issued,
 so it can be run at any time.
 
 ```
-$ sakura-pki get-ca -out ca.crt
+$ sakura-pki export-ca -out ca.crt
 {
   "ca_certificate": "ca.crt",
   "subject": "CN=Example Client CA,O=Example Inc.,C=JP",
