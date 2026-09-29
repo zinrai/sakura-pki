@@ -88,9 +88,6 @@ func requestClient(ctx context.Context, api iaas.CertificateAuthorityAPI, id iaa
 	if err != nil {
 		return nil, fmt.Errorf("%s: could not read the enrolment URL: %w", cn, err)
 	}
-	if c.URL == "" {
-		return nil, fmt.Errorf("%s: the enrolment URL was empty (IssueState=%q)", cn, c.IssueState)
-	}
 
 	return &enrolment{CN: cn, ID: added.ID, URL: c.URL}, nil
 }

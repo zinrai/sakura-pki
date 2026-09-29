@@ -20,9 +20,6 @@ func caCert(ctx context.Context, api iaas.CertificateAuthorityAPI, id iaasID) (*
 	if err != nil {
 		return nil, fmt.Errorf("could not fetch the CA certificate: %w", err)
 	}
-	if detail.CertificateData == nil || detail.CertificateData.CertificatePEM == "" {
-		return nil, fmt.Errorf("the CA certificate was empty")
-	}
 	return parseCert(detail.CertificateData.CertificatePEM)
 }
 

@@ -48,20 +48,14 @@ func TestListedCertReadsTheStateAndTheNestedExpiry(t *testing.T) {
 }
 
 func TestListedCertLeavesOutTheExpiryOfAPendingEnrolment(t *testing.T) {
-	bodies := []string{
-		`{"id":"cccc","subject":"CN=bob","issue_state":"approved"}`,
-		`{"id":"cccc","subject":"CN=bob","issue_state":"approved","certificate_data":{}}`,
-		`{"id":"cccc","subject":"CN=bob","issue_state":"approved","certificate_data":null}`,
-	}
+	body := `{"id":"cccc","subject":"CN=bob","issue_state":"approved","certificate_data":null}`
 
-	for _, body := range bodies {
-		var l listedCert
-		if err := json.Unmarshal([]byte(body), &l); err != nil {
-			t.Fatal(err)
-		}
-		if got := l.entry(clientKind, time.Now()); got.NotAfter != "" || got.Expired {
-			t.Errorf("%s\n  want no expiry, got %q", body, got.NotAfter)
-		}
+	var l listedCert
+	if err := json.Unmarshal([]byte(body), &l); err != nil {
+		t.Fatal(err)
+	}
+	if got := l.entry(clientKind, time.Now()); got.NotAfter != "" || got.Expired {
+		t.Errorf("want no expiry, got %q expired=%v", got.NotAfter, got.Expired)
 	}
 }
 

@@ -77,10 +77,8 @@ func (l listedCert) entry(kind string, now time.Time) certEntry {
 		e.SerialNumber = d.SerialNumber
 		e.notBefore = d.NotBefore.UTC()
 		e.notAfter = d.NotAfter.UTC()
-		if !d.NotAfter.IsZero() {
-			e.NotAfter = e.notAfter.Format(time.RFC3339)
-			e.Expired = !now.Before(d.NotAfter)
-		}
+		e.NotAfter = e.notAfter.Format(time.RFC3339)
+		e.Expired = !now.Before(d.NotAfter)
 	}
 	return e
 }
@@ -132,8 +130,7 @@ func pageThrough[T any](read func(from int) ([]T, int, error)) ([]T, error) {
 			return nil, err
 		}
 		out = append(out, items...)
-		// An empty page ends it even if Total never shrinks
-		if len(items) == 0 || len(out) >= total {
+		if len(out) >= total {
 			return out, nil
 		}
 	}
