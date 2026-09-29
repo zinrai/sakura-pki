@@ -64,10 +64,8 @@ func (c certEntry) due(now time.Time) bool {
 		return false
 	}
 	window := renewWithin
-	if !c.notBefore.IsZero() {
-		if third := c.notAfter.Sub(c.notBefore) / renewFraction; third < window {
-			window = third
-		}
+	if third := c.notAfter.Sub(c.notBefore) / renewFraction; third < window {
+		window = third
 	}
 	return !c.notAfter.After(now.Add(window))
 }

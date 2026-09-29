@@ -32,9 +32,6 @@ func list(kind string, args []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if certs == nil {
-		certs = []certEntry{}
-	}
 	printJSON(certs)
 }
 
@@ -87,10 +84,7 @@ func (l listedCert) entry(kind string, now time.Time) certEntry {
 // returns ten and the check for a name in use misses the rest. Paging goes in
 // the body of a GET, as the SDK's own FindCondition does it.
 func listCerts(ctx context.Context, api iaas.CertificateAuthorityAPI, id iaasID, kind string) ([]certEntry, error) {
-	op, ok := api.(*iaas.CertificateAuthorityOp)
-	if !ok {
-		return nil, fmt.Errorf("unexpected API implementation %T", api)
-	}
+	op := api.(*iaas.CertificateAuthorityOp)
 	url := fmt.Sprintf("%s/%s/%s/%s/%s/certificateauthority/%ss",
 		iaas.SakuraCloudAPIRoot, iaas.APIDefaultZone, op.PathSuffix, op.PathName, id, kind)
 

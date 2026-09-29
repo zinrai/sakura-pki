@@ -78,17 +78,6 @@ func (i *issuer) wait(ctx context.Context, id string, read func(context.Context)
 				errTimeout, i.timeout, id, state)
 		}
 
-		if err := sleep(ctx, i.interval); err != nil {
-			return nil, err
-		}
-	}
-}
-
-func sleep(ctx context.Context, d time.Duration) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(d):
-		return nil
+		time.Sleep(i.interval)
 	}
 }
