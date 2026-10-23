@@ -2,11 +2,12 @@ module github.com/zinrai/sakura-pki
 
 go 1.26.0
 
-require github.com/sacloud/sacloud-sdk-go v0.3.1
+require github.com/sacloud/sacloud-sdk-go v0.4.0
 
 require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/fatih/structs v1.1.0 // indirect
+	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/gofrs/flock v0.13.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
