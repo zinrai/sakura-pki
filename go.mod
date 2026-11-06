@@ -2,7 +2,7 @@ module github.com/zinrai/sakura-pki
 
 go 1.26.0
 
-require github.com/sacloud/sacloud-sdk-go v0.4.0
+require github.com/sacloud/sacloud-sdk-go v0.5.0
 
 require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
@@ -14,5 +14,5 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	go.uber.org/ratelimit v0.3.1 // indirect
-	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 )
